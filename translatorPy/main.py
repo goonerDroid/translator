@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
-import torch
+from fastapi import FastAPI, HTTPException  # type: ignore
+from pydantic import BaseModel # type: ignore
+from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer  # type: ignore
+import torch  # type: ignore
 
 app = FastAPI()
 
@@ -42,5 +42,5 @@ async def translate(request: TranslationRequest):
 
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn  # type: ignore
     uvicorn.run(app, host="0.0.0.0", port=8000)

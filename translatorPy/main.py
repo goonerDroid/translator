@@ -1,17 +1,42 @@
-from fastapi import FastAPI, HTTPException  # type: ignore
-from pydantic import BaseModel # type: ignore
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer  # type: ignore
-import torch  # type: ignore
+from fastapi import FastAPI, HTTPException  
+from pydantic import BaseModel, field_validator 
+from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer  
+import torch 
+from typing import Any
 
 app = FastAPI()
 
 model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
 tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
 
+# List of supported languages by M2M100_418M
+SUPPORTED_LANGUAGES = [
+    "af", "am", "ar", "ast", "az", "ba", "be", "bg", "bn", "br", "bs", "ca", "ceb", "cs", "cy", "da", "de", "el", 
+    "en", "es", "et", "fa", "ff", "fi", "fr", "fy", "ga", "gd", "gl", "gu", "ha", "he", "hi", "hr", "ht", "hu", 
+    "hy", "id", "ig", "ilo", "is", "it", "ja", "jv", "ka", "kk", "km", "kn", "ko", "lb", "lg", "ln", "lo", "lt", 
+    "lv", "mg", "mk", "ml", "mn", "mr", "ms", "my", "ne", "nl", "no", "ns", "oc", "or", "pa", "pl", "ps", "pt", 
+    "ro", "ru", "sd", "si", "sk", "sl", "so", "sq", "sr", "ss", "su", "sv", "sw", "ta", "th", "tl", "tn", "tr", 
+    "uk", "ur", "uz", "vi", "wo", "xh", "yi", "yo", "zh", "zu"
+]
+
 class TranslationRequest(BaseModel):
     text: str
     source_lang: str
     target_lang: str
+
+    @field_validator('source_lang', 'target_lang')
+    @classmethod
+    def validate_language(cls, lang: str, info: Any) -> str:
+        if lang not in SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"Language '{lang}' is not supported.",
+                {
+                    "field": info.field_name,
+                    "supported_languages": SUPPORTED_LANGUAGES,
+                    "total_supported": len(SUPPORTED_LANGUAGES)
+                }
+            )
+        return lang
 
 class TranslationResponse(BaseModel):
     text: str

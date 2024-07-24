@@ -3,11 +3,16 @@ from pydantic import BaseModel, field_validator
 from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer  
 import torch 
 from typing import Any
+import redis
+import json
 
 app = FastAPI()
 
 model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
 tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
+
+# Set up Redis connection
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
 # List of supported languages by M2M100_418M
 SUPPORTED_LANGUAGES = [
@@ -39,31 +44,39 @@ class TranslationRequest(BaseModel):
         return lang
 
 class TranslationResponse(BaseModel):
-    text: str
+    translation: str
+    cached: bool
 
+def get_cache_key(text: str, source_lang: str, target_lang: str) -> str:
+    return f"translation:{source_lang}:{target_lang}:{hash(text)}"
 
 @app.post("/translate", response_model=TranslationResponse)
 async def translate(request: TranslationRequest):
     try:
-        # Tokenize input text
+        cache_key = get_cache_key(request.text, request.source_lang, request.target_lang)
+        
+        # Check if translation is in cache
+        cached_translation = redis_client.get(cache_key)
+        if cached_translation:
+            return TranslationResponse(translation=cached_translation.decode('utf-8'), cached=True)
+
+        # If not in cache, perform translation
         tokenizer.src_lang = request.source_lang
         encoded_text = tokenizer(request.text, return_tensors="pt")
 
-        # Generate translation
         generated_tokens = model.generate(
             **encoded_text,
             forced_bos_token_id=tokenizer.get_lang_id(request.target_lang)
         )
 
-        # Decode the generated tokens to text
         translation = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
 
-        return TranslationResponse(text=translation)
-        
-    
+        # Cache the translation
+        redis_client.setex(cache_key, 3600, translation)  # Cache for 1 hour
+
+        return TranslationResponse(translation=translation, cached=False)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+        raise HTTPException(status_code=500, detail=str(e))    
 
 
 if __name__ == "__main__":
